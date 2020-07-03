@@ -322,6 +322,29 @@ class Magmodules_Channable_Helper_Data extends Mage_Core_Helper_Abstract
 
     /**
      * @param Mage_Catalog_Model_Product $product
+     * @param int                        $categoryId
+     * @param int                        $storeId
+     *
+     * @return bool|string
+     */
+    public function getProductRewriteUrl($product, $categoryId, $storeId)
+    {
+        $select = Mage::getSingleton('catalog/factory')
+                    ->getProductUrlRewriteHelper()
+                    ->getTableSelect($product->getId(), $categoryId, $storeId);
+
+        $productCollection = Mage::getModel('catalog/product')->getCollection();
+        foreach ($productCollection->getConnection()->fetchAll($select) as $row) {
+            if ($row['request_path']) {
+                return $row['request_path'];
+            }
+        }
+
+        return false;
+    }
+    
+    /**
+     * @param Mage_Catalog_Model_Product $product
      * @param                            $config
      * @param Mage_Catalog_Model_Product $parent
      * @param                            $parentAttributes
@@ -331,36 +354,41 @@ class Magmodules_Channable_Helper_Data extends Mage_Core_Helper_Abstract
     public function getProductUrl($product, $config, $parent, $parentAttributes)
     {
         $url = '';
-        if (!empty($parent)) {
-            if ($parent->getRequestPath()) {
-                $url = Mage::helper('core')->escapeHtml(trim($config['website_url'] . $parent->getRequestPath()));
+        
+        $theProduct = !empty($parent) ? $parent : $product;
+        
+        foreach($theProduct->getCategoryIds() as $categoryId) {
+            $rewriteUrl = $this->getProductRewriteUrl($theProduct, $categoryId, $config['store_id']);
+            if (strlen($rewriteUrl) > strlen($url)) {
+                $url = $rewriteUrl;
             }
+        }
 
-            if (empty($url)) {
-                if ($parent->getUrlKey()) {
-                    $url = Mage::helper('core')->escapeHtml(trim($config['website_url'] . $parent->getUrlKey()));
-                }
-            }
+        if (!empty($url)) {
+
+            $url = $config['website_url'] . $url;
+
         } else {
-            if ($product->getRequestPath()) {
-                $url = Mage::helper('core')->escapeHtml(trim($config['website_url'] . $product->getRequestPath()));
+            
+            if ($theProduct->getRequestPath()) {
+                $url = Mage::helper('core')->escapeHtml(trim($config['website_url'] . $theProduct->getRequestPath()));
             }
 
             if (empty($url)) {
-                if ($product->getUrlKey()) {
-                    $url = Mage::helper('core')->escapeHtml(trim($config['website_url'] . $product->getUrlKey()));
+                if ($theProduct->getUrlKey()) {
+                    $url = Mage::helper('core')->escapeHtml(trim($config['website_url'] . $theProduct->getUrlKey()));
                 }
             }
-        }
 
-        if (!empty($config['product_url_suffix'])) {
-            if (strpos($url, $config['product_url_suffix']) === false) {
-                $url = $url . $config['product_url_suffix'];
+            if (!empty($config['product_url_suffix'])) {
+                if (strpos($url, $config['product_url_suffix']) === false) {
+                    $url = $url . $config['product_url_suffix'];
+                }
             }
-        }
 
-        if (!empty($config['url_suffix'])) {
-            $url = $url . '?' . $config['url_suffix'];
+            if (!empty($config['url_suffix'])) {
+                $url = $url . '?' . $config['url_suffix'];
+            }
         }
 
         if (!empty($parent) && !empty($config['conf_switch_urls'])) {
